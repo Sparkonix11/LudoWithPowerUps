@@ -10,9 +10,10 @@ import { useGameStore } from '../store/gameStore';
 import { cn } from '../lib/utils';
 
 export default function Home() {
-  const { initGame, diceRoll, setDiceRoll, currentPlayerIndex, players, phase, moveToken, tokens, activatePowerUp, theme, toggleTheme } = useGameStore();
+  const { initGame, diceRoll, setDiceRoll, setDiceRollValue, currentPlayerIndex, players, phase, moveToken, tokens, activatePowerUp, theme, toggleTheme } = useGameStore();
   const [rolling, setRolling] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
 
   useEffect(() => {
     initGame(4);
@@ -164,6 +165,57 @@ export default function Home() {
             onRoll={handleRoll}
             disabled={phase !== 'ROLLING' || rolling}
           />
+
+          {/* Debug Panel */}
+          <div className={cn(
+            "mt-4 p-4 rounded-xl border shadow-lg backdrop-blur-md transition-all",
+            isDark ? "bg-black/60 border-yellow-500/30" : "bg-yellow-50/90 border-yellow-300"
+          )}>
+            <button
+              onClick={() => setShowDebug(!showDebug)}
+              className={cn(
+                "text-xs font-bold uppercase tracking-wider mb-2 w-full text-left",
+                isDark ? "text-yellow-400" : "text-yellow-700"
+              )}
+            >
+              {showDebug ? '▼' : '▶'} Debug Mode
+            </button>
+            {showDebug && (
+              <div className="mt-2 space-y-2">
+                <p className={cn(
+                  "text-xs mb-2",
+                  isDark ? "text-yellow-300/80" : "text-yellow-700/80"
+                )}>
+                  Manually set dice value:
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {[1, 2, 3, 4, 5, 6].map((value) => (
+                    <button
+                      key={value}
+                      onClick={() => {
+                        if (phase === 'ROLLING') {
+                          setDiceRollValue(value);
+                        }
+                      }}
+                      disabled={phase !== 'ROLLING'}
+                      className={cn(
+                        "px-3 py-2 rounded-lg font-bold text-sm transition-all",
+                        phase === 'ROLLING'
+                          ? isDark
+                            ? "bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 border border-yellow-500/50"
+                            : "bg-yellow-200 hover:bg-yellow-300 text-yellow-800 border border-yellow-400"
+                          : isDark
+                            ? "bg-gray-800/50 text-gray-500 border border-gray-700 cursor-not-allowed"
+                            : "bg-gray-200 text-gray-400 border border-gray-300 cursor-not-allowed"
+                      )}
+                    >
+                      {value}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

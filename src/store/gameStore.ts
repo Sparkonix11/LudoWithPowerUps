@@ -5,6 +5,7 @@ import { getTrackLength, getStartPosition, isSafeZone, isPowerUpZone } from '../
 interface GameActions {
     initGame: (playerCount: number) => void;
     setDiceRoll: () => void;
+    setDiceRollValue: (value: number) => void;
     moveToken: (tokenId: TokenId) => void;
     setTokenStatus: (tokenId: TokenId, status: Token['status']) => void;
     nextTurn: () => void;
@@ -87,6 +88,30 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
             set({ diceRoll: roll, phase: 'MOVING' });
         } else {
             set({ diceRoll: roll, phase: 'SKIPPING' });
+            setTimeout(() => {
+                get().nextTurn();
+            }, 1000);
+        }
+    },
+
+    setDiceRollValue: (value: number) => {
+        if (value < 1 || value > 6) return;
+        const state = get();
+        const player = state.players[state.currentPlayerIndex];
+        if (!player) return;
+
+        const playerTokens = Object.values(state.tokens).filter(t => t.playerId === player.id);
+
+        const hasValidMove = playerTokens.some(token => {
+            if (token.status === 'BASE') return value === 6;
+            if (token.status === 'ACTIVE') return true;
+            return false;
+        });
+
+        if (hasValidMove) {
+            set({ diceRoll: value, phase: 'MOVING' });
+        } else {
+            set({ diceRoll: value, phase: 'SKIPPING' });
             setTimeout(() => {
                 get().nextTurn();
             }, 1000);

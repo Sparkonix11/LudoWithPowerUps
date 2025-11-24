@@ -6,20 +6,25 @@ export const getTrackLength = (playerCount: number): number => {
 };
 
 export const getStartPosition = (playerIndex: number, playerCount: number): number => {
-    if (playerCount === 4) return playerIndex * 13;
+    if (playerCount === 4) {
+        // Player indices: 0=Red, 1=Green, 2=Blue, 3=Yellow
+        // Start positions: Red=0, Green=13, Blue=39, Yellow=26
+        const startPositions = [0, 13, 39, 26];
+        return startPositions[playerIndex] ?? playerIndex * 13;
+    }
     return playerIndex * 13;
 };
 
 export const isSafeZone = (position: number, playerCount: number): boolean => {
     // Standard Ludo Safe Zones:
-    // 1. Start positions (0, 13, 26, 39)
+    // 1. Start positions (Red=0, Green=13, Blue=39, Yellow=26)
     // 2. Star positions (8, 21, 34, 47) - typically 8 steps from start?
     // Let's check the image.
     // Red Start is at index 0 (relative to Red).
     // Star is at index 8?
     // Let's define fixed safe indices for 4 players.
     if (playerCount === 4) {
-        const starts = [0, 13, 26, 39];
+        const starts = [0, 13, 39, 26]; // Red, Green, Blue, Yellow
         const stars = [8, 21, 34, 47];
         return starts.includes(position) || stars.includes(position);
     }
