@@ -8,6 +8,7 @@ interface GameActions {
     setDiceRollValue: (value: number) => void;
     moveToken: (tokenId: TokenId) => void;
     setTokenStatus: (tokenId: TokenId, status: Token['status']) => void;
+    setTokenPosition: (tokenId: TokenId, position: number, status: Token['status'], homePosition?: number) => void;
     nextTurn: () => void;
     activatePowerUp: (playerId: string, powerUpIndex: number, targetTokenId?: string) => void;
     theme: 'light' | 'dark';
@@ -374,6 +375,34 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
                 },
             },
         })),
+
+    setTokenPosition: (tokenId, position, status, homePosition) =>
+        set((state) => {
+            const token = state.tokens[tokenId];
+            if (!token) return state;
+
+            const updatedToken: Token = {
+                ...token,
+                position,
+                status,
+            };
+
+            // If status is HOME_STRETCH, ensure position is set correctly
+            if (status === 'HOME_STRETCH' && homePosition !== undefined) {
+                updatedToken.position = homePosition;
+            } else if (status === 'FINISHED') {
+                updatedToken.position = 5;
+            } else if (status === 'BASE') {
+                updatedToken.position = -1;
+            }
+
+            return {
+                tokens: {
+                    ...state.tokens,
+                    [tokenId]: updatedToken,
+                },
+            };
+        }),
 
     nextTurn: () =>
         set((state) => {

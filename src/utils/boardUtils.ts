@@ -7,13 +7,13 @@ export const getTrackLength = (playerCount: number): number => {
 
 export const getStartPosition = (playerIndex: number, playerCount: number): number => {
     if (playerCount === 4) {
-        // Player indices: 0=Red, 1=Green, 2=Yellow, 3=Blue
+        // Player indices: 0=Red, 1=Green, 2=Blue, 3=Yellow
         // Start positions for 52-position track:
         // Red: position 0 = (1, 6)
         // Green: position 13 = (8, 1)
-        // Yellow: position 26 = (13, 8)
         // Blue: position 39 = (6, 13)
-        const startPositions = [0, 13, 26, 39];
+        // Yellow: position 26 = (13, 8)
+        const startPositions = [0, 13, 39, 26];
         return startPositions[playerIndex] ?? playerIndex * 13;
     }
     return playerIndex * 13;
@@ -23,8 +23,8 @@ export const getStartPosition = (playerIndex: number, playerCount: number): numb
 export const getTurningIndex = (playerIndex: number, playerCount: number): number => {
     if (playerCount === 4) {
         // Turning indices: where each player leaves main track to enter home stretch
-        // Red: 50 (0,7), Green: 11 (7,0), Yellow: 24 (14,7), Blue: 37 (7,14)
-        const turningIndices = [50, 11, 24, 37];
+        // Red: 50 (0,7), Green: 11 (7,0), Blue: 37 (7,14), Yellow: 24 (14,7)
+        const turningIndices = [50, 11, 37, 24];
         return turningIndices[playerIndex] ?? 0;
     }
     return 0;
@@ -34,8 +34,8 @@ export const getTurningIndex = (playerIndex: number, playerCount: number): numbe
 export const getSkippedIndex = (playerIndex: number, playerCount: number): number => {
     if (playerCount === 4) {
         // Skipped indices: the square after turning index that player skips
-        // Red: 51 (0,6), Green: 12 (8,0), Yellow: 25 (14,8), Blue: 38 (6,14)
-        const skippedIndices = [51, 12, 25, 38];
+        // Red: 51 (0,6), Green: 12 (8,0), Blue: 38 (6,14), Yellow: 25 (14,8)
+        const skippedIndices = [51, 12, 38, 25];
         return skippedIndices[playerIndex] ?? 0;
     }
     return 0;
@@ -43,10 +43,10 @@ export const getSkippedIndex = (playerIndex: number, playerCount: number): numbe
 
 export const isSafeZone = (position: number, playerCount: number): boolean => {
     // Standard Ludo Safe Zones:
-    // 1. Start positions (Red=0, Green=13, Yellow=26, Blue=39) - for 52-position track
+    // 1. Start positions (Red=0, Green=13, Blue=39, Yellow=26) - for 52-position track
     // 2. Star positions (8, 21, 34, 47) - typically 8 steps from start
     if (playerCount === 4) {
-        const starts = [0, 13, 26, 39]; // Red, Green, Yellow, Blue
+        const starts = [0, 13, 39, 26]; // Red, Green, Blue, Yellow
         const stars = [8, 21, 34, 47];
         return starts.includes(position) || stars.includes(position);
     }
@@ -73,10 +73,11 @@ export const getHomeStart = (playerIndex: number, playerCount: number): number =
 // Standard Ludo Grid (15x15)
 // Red: Top-Left (P0)
 // Green: Top-Right (P1)
-// Yellow: Bottom-Right (P2)
-// Blue: Bottom-Left (P3)
+// Blue: Bottom-Left (P2)
+// Yellow: Bottom-Right (P3)
 // Note: Order in image is Red(TL) -> Green(TR) -> Yellow(BR) -> Blue(BL).
 // Clockwise order of play usually: Red -> Green -> Yellow -> Blue.
+// Player indices: 0=Red, 1=Green, 2=Blue, 3=Yellow
 // Path:
 // Red starts at (1, 6) -> Right to (5, 6) -> Up to (5, 0) -> Right to (6, 0) -> Down to (6, 5) -> Right to (8, 5) -> Up to (8, 0) ...
 // Wait, let's map the 52 steps manually for precision.
@@ -163,8 +164,8 @@ export const getHomeStretchCoordinates = (playerIndex: number, homePosition: num
     // Home stretch lanes (first square is immediately after start square):
     // Red (0): x={1 to 6}, y=7 (left to right) - position 0 = (1, 7)
     // Green (1): x=7, y={1 to 6} (top to bottom) - position 0 = (7, 1)
-    // Yellow (3): x={9 to 14}, y=7 (right to left) - position 0 = (13, 7)
     // Blue (2): x=7, y={9 to 14} (bottom to top) - position 0 = (7, 13)
+    // Yellow (3): x={9 to 14}, y=7 (right to left) - position 0 = (13, 7)
     
     if (homePosition >= 5) {
         // At center home
@@ -225,4 +226,104 @@ export const getCoordinates = (position: number, playerCount: number, status?: s
         x: 50 + r * Math.cos(angle),
         y: 50 + r * Math.sin(angle)
     };
+};
+
+// Convert viewbox coordinates (0-100) back to board position
+// Returns { position, status, homePosition } or null if not on a valid position
+export const getPositionFromCoordinates = (
+    x: number,
+    y: number,
+    playerCount: number,
+    playerIndex?: number
+): { position: number; status: 'BASE' | 'ACTIVE' | 'HOME_STRETCH' | 'FINISHED'; homePosition?: number } | null => {
+    if (playerCount !== 4) return null;
+
+    const cellSize = 100 / 15;
+    const offset = cellSize / 2;
+    const threshold = cellSize * 0.6; // Distance threshold for snapping
+
+    // Convert viewbox coordinates to grid coordinates
+    const gridX = (x - offset) / cellSize;
+    const gridY = (y - offset) / cellSize;
+
+    // Check if in center home (finished position)
+    const centerX = 7.5;
+    const centerY = 7.5;
+    const distToCenter = Math.sqrt((gridX - centerX) ** 2 + (gridY - centerY) ** 2);
+    if (distToCenter < 1.5 && playerIndex !== undefined) {
+        return { position: 5, status: 'FINISHED', homePosition: 5 };
+    }
+
+    // Check home stretch lanes
+    if (playerIndex !== undefined) {
+        // Red (0): x={1 to 6}, y=7
+        if (playerIndex === 0 && Math.abs(gridY - 7) < 0.5 && gridX >= 1 && gridX <= 6) {
+            const homePos = Math.round(gridX - 1);
+            if (homePos >= 0 && homePos < 5) {
+                return { position: homePos, status: 'HOME_STRETCH', homePosition: homePos };
+            }
+        }
+        // Green (1): x=7, y={1 to 6}
+        if (playerIndex === 1 && Math.abs(gridX - 7) < 0.5 && gridY >= 1 && gridY <= 6) {
+            const homePos = Math.round(gridY - 1);
+            if (homePos >= 0 && homePos < 5) {
+                return { position: homePos, status: 'HOME_STRETCH', homePosition: homePos };
+            }
+        }
+        // Blue (2): x=7, y={9 to 14}
+        if (playerIndex === 2 && Math.abs(gridX - 7) < 0.5 && gridY >= 9 && gridY <= 14) {
+            const homePos = Math.round(13 - gridY);
+            if (homePos >= 0 && homePos < 5) {
+                return { position: homePos, status: 'HOME_STRETCH', homePosition: homePos };
+            }
+        }
+        // Yellow (3): x={9 to 14}, y=7
+        if (playerIndex === 3 && Math.abs(gridY - 7) < 0.5 && gridX >= 9 && gridX <= 14) {
+            const homePos = Math.round(13 - gridX);
+            if (homePos >= 0 && homePos < 5) {
+                return { position: homePos, status: 'HOME_STRETCH', homePosition: homePos };
+            }
+        }
+    }
+
+    // Check base positions
+    const basePositions = [
+        { x: 2, y: 2, playerIdx: 0 }, { x: 4, y: 2, playerIdx: 0 },
+        { x: 2, y: 4, playerIdx: 0 }, { x: 4, y: 4, playerIdx: 0 },
+        { x: 11, y: 2, playerIdx: 1 }, { x: 13, y: 2, playerIdx: 1 },
+        { x: 11, y: 4, playerIdx: 1 }, { x: 13, y: 4, playerIdx: 1 },
+        { x: 2, y: 11, playerIdx: 2 }, { x: 4, y: 11, playerIdx: 2 },
+        { x: 2, y: 13, playerIdx: 2 }, { x: 4, y: 13, playerIdx: 2 },
+        { x: 11, y: 11, playerIdx: 3 }, { x: 13, y: 11, playerIdx: 3 },
+        { x: 11, y: 13, playerIdx: 3 }, { x: 13, y: 13, playerIdx: 3 },
+    ];
+
+    for (const base of basePositions) {
+        const dist = Math.sqrt((gridX - base.x) ** 2 + (gridY - base.y) ** 2);
+        if (dist < 0.8 && (playerIndex === undefined || base.playerIdx === playerIndex)) {
+            return { position: -1, status: 'BASE' };
+        }
+    }
+
+    // Check main track positions - find closest
+    let minDist = Infinity;
+    let closestPosition = -1;
+
+    for (let i = 0; i < STANDARD_PATH.length; i++) {
+        const point = STANDARD_PATH[i]!;
+        const pointX = point.x * cellSize + offset;
+        const pointY = point.y * cellSize + offset;
+        const dist = Math.sqrt((x - pointX) ** 2 + (y - pointY) ** 2);
+
+        if (dist < minDist && dist < threshold) {
+            minDist = dist;
+            closestPosition = i;
+        }
+    }
+
+    if (closestPosition >= 0) {
+        return { position: closestPosition, status: 'ACTIVE' };
+    }
+
+    return null;
 };

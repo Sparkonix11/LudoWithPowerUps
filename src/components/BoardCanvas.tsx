@@ -1,17 +1,105 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useGameStore } from '../store/gameStore';
-import { getTrackLength, getCoordinates, isPowerUpZone } from '../utils/boardUtils';
+import { getTrackLength, getCoordinates, getPositionFromCoordinates } from '../utils/boardUtils';
 
-const BoardCanvas = () => {
-    const { boardConfig, tokens, players, moveToken, phase } = useGameStore();
+interface BoardCanvasProps {
+    debugMode?: boolean;
+}
+
+const BoardCanvas = ({ debugMode = false }: BoardCanvasProps) => {
+    const { boardConfig, tokens, players, moveToken, phase, setTokenPosition } = useGameStore();
     const [mounted, setMounted] = useState(false);
+    const [draggingToken, setDraggingToken] = useState<string | null>(null);
+    const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
+    const svgRef = useRef<SVGSVGElement>(null);
 
     useEffect(() => {
         setMounted(true);
     }, []);
+
+    // Convert mouse coordinates to SVG viewBox coordinates
+    const getSVGCoordinates = (e: React.MouseEvent<SVGSVGElement> | MouseEvent): { x: number; y: number } | null => {
+        if (!svgRef.current) return null;
+        const svg = svgRef.current;
+        const rect = svg.getBoundingClientRect();
+        const viewBox = svg.viewBox.baseVal;
+        
+        const x = ((e.clientX - rect.left) / rect.width) * viewBox.width;
+        const y = ((e.clientY - rect.top) / rect.height) * viewBox.height;
+        
+        return { x, y };
+    };
+
+    const handleDragStart = (e: React.MouseEvent, tokenId: string) => {
+        if (!debugMode) return;
+        e.preventDefault();
+        setDraggingToken(tokenId);
+        const coords = getSVGCoordinates(e);
+        if (coords) {
+            setDragPosition(coords);
+        }
+    };
+
+    const handleDrag = (e: React.MouseEvent<SVGSVGElement> | MouseEvent) => {
+        if (!debugMode || !draggingToken) return;
+        const coords = getSVGCoordinates(e);
+        if (coords) {
+            setDragPosition(coords);
+        }
+    };
+
+    const handleDragEnd = (e: React.MouseEvent<SVGSVGElement> | MouseEvent) => {
+        if (!debugMode || !draggingToken) return;
+        
+        const coords = getSVGCoordinates(e);
+        if (coords && draggingToken) {
+            const token = tokens[draggingToken];
+            if (token) {
+                const playerIndex = players.findIndex(p => p.id === token.playerId);
+                const positionData = getPositionFromCoordinates(
+                    coords.x,
+                    coords.y,
+                    boardConfig.playerCount,
+                    playerIndex
+                );
+                
+                if (positionData) {
+                    setTokenPosition(
+                        draggingToken,
+                        positionData.position,
+                        positionData.status,
+                        positionData.homePosition
+                    );
+                }
+            }
+        }
+        
+        setDraggingToken(null);
+        setDragPosition(null);
+    };
+
+    useEffect(() => {
+        if (!debugMode || !draggingToken) return;
+
+        const handleMouseMove = (e: MouseEvent) => {
+            handleDrag(e);
+        };
+
+        const handleMouseUp = (e: MouseEvent) => {
+            handleDragEnd(e);
+        };
+
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [debugMode, draggingToken]);
 
     if (!mounted) return null;
 
@@ -150,14 +238,24 @@ const BoardCanvas = () => {
 
     return (
         <div className="relative flex items-center justify-center w-full h-full p-4 bg-white rounded-xl shadow-2xl border-4 border-gray-800">
-            <svg viewBox="0 0 100 100" className="w-full h-full max-w-[80vh] max-h-[80vh]">
+            <svg 
+                ref={svgRef}
+                viewBox="0 0 100 100" 
+                className="w-full h-full max-w-[80vh] max-h-[80vh]"
+                onMouseMove={debugMode ? handleDrag : undefined}
+                onMouseUp={debugMode ? handleDragEnd : undefined}
+            >
                 {renderGridBackground()}
 
                 {/* Render Tokens */}
                 {Object.values(tokens).map((token) => {
                     let cx, cy;
 
-                    if (token.status === 'BASE') {
+                    // If dragging this token, use drag position
+                    if (draggingToken === token.id && dragPosition) {
+                        cx = dragPosition.x;
+                        cy = dragPosition.y;
+                    } else if (token.status === 'BASE') {
                         const pIdx = players.findIndex(p => p.id === token.playerId);
                         // Base positions mapping
                         let baseX = 0, baseY = 0;
@@ -186,16 +284,19 @@ const BoardCanvas = () => {
                     }
 
                     const player = players.find((p) => p.id === token.playerId);
+                    const isDragging = draggingToken === token.id;
 
                     return (
                         <motion.g
                             key={token.id}
                             initial={{ cx, cy }}
                             animate={{ cx, cy }}
-                            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                            onClick={() => phase === 'MOVING' && moveToken(token.id)}
-                            className="cursor-pointer"
-                            whileHover={{ scale: 1.2 }}
+                            transition={isDragging ? { duration: 0 } : { type: "spring", stiffness: 300, damping: 30 }}
+                            onClick={() => !debugMode && phase === 'MOVING' && moveToken(token.id)}
+                            onMouseDown={(e) => debugMode && handleDragStart(e, token.id)}
+                            className={debugMode ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"}
+                            whileHover={!isDragging ? { scale: 1.2 } : {}}
+                            style={{ opacity: isDragging ? 0.8 : 1 }}
                         >
                             {/* Token Shadow */}
                             <circle cx={cx + 0.5} cy={cy + 0.5} r="2.5" fill={COLORS.SHADOW} />

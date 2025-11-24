@@ -128,7 +128,7 @@ export default function Home() {
         isDark ? "bg-neutral-900" : "bg-slate-50"
       )}>
         <div className="w-full max-w-[90vh] aspect-square p-4">
-          <BoardCanvas />
+          <BoardCanvas debugMode={showDebug} />
         </div>
 
         {/* Floating Controls (Bottom Center) */}
@@ -178,40 +178,56 @@ export default function Home() {
                 isDark ? "text-yellow-400" : "text-yellow-700"
               )}
             >
-              {showDebug ? '▼' : '▶'} Debug Mode
+              {showDebug ? '▼' : '▶'} Debug Mode {showDebug && '🔧'}
             </button>
             {showDebug && (
-              <div className="mt-2 space-y-2">
-                <p className={cn(
-                  "text-xs mb-2",
-                  isDark ? "text-yellow-300/80" : "text-yellow-700/80"
-                )}>
-                  Manually set dice value:
-                </p>
-                <div className="grid grid-cols-3 gap-2">
-                  {[1, 2, 3, 4, 5, 6].map((value) => (
-                    <button
-                      key={value}
-                      onClick={() => {
-                        if (phase === 'ROLLING') {
-                          setDiceRollValue(value);
-                        }
-                      }}
-                      disabled={phase !== 'ROLLING'}
-                      className={cn(
-                        "px-3 py-2 rounded-lg font-bold text-sm transition-all",
-                        phase === 'ROLLING'
-                          ? isDark
-                            ? "bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 border border-yellow-500/50"
-                            : "bg-yellow-200 hover:bg-yellow-300 text-yellow-800 border border-yellow-400"
-                          : isDark
-                            ? "bg-gray-800/50 text-gray-500 border border-gray-700 cursor-not-allowed"
-                            : "bg-gray-200 text-gray-400 border border-gray-300 cursor-not-allowed"
-                      )}
-                    >
-                      {value}
-                    </button>
-                  ))}
+              <div className="mt-2 space-y-3">
+                <div>
+                  <p className={cn(
+                    "text-xs mb-2 font-semibold",
+                    isDark ? "text-yellow-300/80" : "text-yellow-700/80"
+                  )}>
+                    Manually set dice value:
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[1, 2, 3, 4, 5, 6].map((value) => (
+                      <button
+                        key={value}
+                        onClick={() => {
+                          if (phase === 'ROLLING') {
+                            setDiceRollValue(value);
+                          }
+                        }}
+                        disabled={phase !== 'ROLLING'}
+                        className={cn(
+                          "px-3 py-2 rounded-lg font-bold text-sm transition-all",
+                          phase === 'ROLLING'
+                            ? isDark
+                              ? "bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 border border-yellow-500/50"
+                              : "bg-yellow-200 hover:bg-yellow-300 text-yellow-800 border border-yellow-400"
+                            : isDark
+                              ? "bg-gray-800/50 text-gray-500 border border-gray-700 cursor-not-allowed"
+                              : "bg-gray-200 text-gray-400 border border-gray-300 cursor-not-allowed"
+                        )}
+                      >
+                        {value}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="pt-2 border-t border-yellow-500/30">
+                  <p className={cn(
+                    "text-xs mb-1 font-semibold",
+                    isDark ? "text-yellow-300/80" : "text-yellow-700/80"
+                  )}>
+                    Drag & Drop Tokens:
+                  </p>
+                  <p className={cn(
+                    "text-xs",
+                    isDark ? "text-yellow-400/60" : "text-yellow-600/70"
+                  )}>
+                    Click and drag any token to move it anywhere on the board
+                  </p>
                 </div>
               </div>
             )}
