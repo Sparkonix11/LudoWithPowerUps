@@ -234,11 +234,12 @@ const BoardCanvas = ({ debugMode = false }: BoardCanvasProps) => {
     };
 
     return (
-        <div className="relative flex items-center justify-center w-full h-full p-4 bg-white rounded-xl shadow-2xl border-4 border-gray-800">
+        <div className="relative flex items-center justify-center w-full h-full min-w-0 min-h-0 p-1 xl:p-4 bg-white rounded-xl shadow-2xl border-4 border-gray-800 overflow-hidden">
             <svg 
                 ref={svgRef}
                 viewBox="0 0 100 100" 
-                className="w-full h-full max-w-[80vh] max-h-[80vh]"
+                className="w-full h-full"
+                preserveAspectRatio="xMidYMid meet"
                 onMouseMove={debugMode ? handleDrag : undefined}
                 onMouseUp={debugMode ? handleDragEnd : undefined}
             >

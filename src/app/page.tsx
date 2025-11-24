@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Moon, Sun, Maximize, Minimize } from 'lucide-react';
+import { Moon, Sun, Maximize, Minimize, X, Menu } from 'lucide-react';
 import BoardCanvas from '../components/BoardCanvas';
 import { Dice } from '../components/Dice';
 import { PlayerCard } from '../components/PlayerCard';
@@ -30,10 +30,35 @@ export default function Home() {
   const [rolling, setRolling] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
+  const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);
+  const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 1280; // xl breakpoint (1280px) - tablets use drawer layout
+    }
+    return true; // SSR default
+  });
 
   useEffect(() => {
     initGame(4);
   }, [initGame]);
+
+  useEffect(() => {
+    const checkScreenSize = () => {
+      const wasDesktop = isDesktop;
+      const nowDesktop = window.innerWidth >= 1280; // xl breakpoint (1280px)
+      setIsDesktop(nowDesktop);
+      
+      // Close drawers when switching from desktop to tablet
+      if (wasDesktop && !nowDesktop) {
+        setLeftDrawerOpen(false);
+        setRightDrawerOpen(false);
+      }
+    };
+    checkScreenSize();
+    window.addEventListener('resize', checkScreenSize);
+    return () => window.removeEventListener('resize', checkScreenSize);
+  }, [isDesktop]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -105,70 +130,136 @@ export default function Home() {
         </button>
       </div>
 
-      {/* Left Panel */}
-      <div className={cn(
-        "w-80 p-6 flex flex-col justify-center gap-6 z-10 backdrop-blur-sm border-r transition-colors duration-300",
-        isDark ? "bg-black/20 border-white/10" : "bg-white/50 border-slate-200"
-      )}>
-        <div className="mb-8">
-          <h1 className={cn(
-            "text-4xl font-black tracking-tighter transition-colors",
-            isDark ? "text-white" : "text-slate-800"
-          )}>
-            LUDO<br />{isDark ? 'NEON' : 'CLASSIC'}
-          </h1>
-          <p className={cn(
-            "text-sm font-medium tracking-widest mt-2 transition-colors",
-            isDark ? "text-gray-400" : "text-slate-500"
-          )}>MODULAR CHAOS</p>
-        </div>
-
-        <div className="flex flex-col gap-4">
-          {leftPlayers.map((p) => (
-            <PlayerCard
-              key={p.id}
-              player={p}
-              isActive={players[currentPlayerIndex]?.id === p.id}
-              onActivatePowerUp={(idx) => {
-                const powerUp = p.powerUps[idx];
-                if (!powerUp) return;
-                
-                // Power-ups that need selection will trigger the selection modal
-                const needsSelection = ['TELEPORT', 'EXACT_MOVE', 'SEND_BACK', 'FREEZE', 'MAGNET', 'STEAL_POWERUP', 'DICE_LOCK'].includes(powerUp.type);
-                
-                if (needsSelection) {
-                  // Trigger selection modal
-                  useGameStore.setState({
-                    phase: 'POWERUP_SELECTION',
-                    pendingPowerUpSelection: { powerUpType: powerUp.type, powerUpIndex: idx, playerId: p.id }
-                  });
-                } else {
-                  // Try to find a default token for power-ups that need one
-                  const myToken = Object.values(tokens).find(t => t.playerId === p.id && (t.status === 'ACTIVE' || t.status === 'HOME_STRETCH'));
-                  if (myToken) {
-                    activatePowerUp(p.id, idx, myToken.id);
-                  } else {
-                    // If no token available, still try to activate (some power-ups don't need tokens)
-                    activatePowerUp(p.id, idx);
-                  }
-                }
-              }}
-            />
-          ))}
-        </div>
+      {/* Tablet Drawer Toggle Buttons */}
+      <div className="xl:hidden absolute top-4 left-4 z-50">
+        <button
+          onClick={() => setLeftDrawerOpen(true)}
+          className={cn(
+            "p-2 rounded-full shadow-lg transition-all",
+            isDark ? "bg-white/10 text-white hover:bg-white/20" : "bg-white text-slate-700 hover:bg-slate-100"
+          )}
+          title="Open Players"
+        >
+          <Menu size={24} />
+        </button>
       </div>
+
+      <div className="xl:hidden absolute top-4 left-20 z-50">
+        <button
+          onClick={() => setRightDrawerOpen(true)}
+          className={cn(
+            "p-2 rounded-full shadow-lg transition-all",
+            isDark ? "bg-white/10 text-white hover:bg-white/20" : "bg-white text-slate-700 hover:bg-slate-100"
+          )}
+          title="Open Game Status"
+        >
+          <Menu size={24} />
+        </button>
+      </div>
+
+      {/* Backdrop Overlay for Tablets */}
+      <AnimatePresence>
+        {(leftDrawerOpen || rightDrawerOpen) && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => {
+              setLeftDrawerOpen(false);
+              setRightDrawerOpen(false);
+            }}
+            className="xl:hidden fixed inset-0 bg-black/50 z-40"
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Left Panel - Desktop: Always visible, Tablet: Drawer */}
+      <motion.div
+        initial={false}
+        animate={
+          isDesktop 
+            ? {} 
+            : { x: leftDrawerOpen ? 0 : '-100%' }
+        }
+        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+        className={cn(
+          "fixed xl:relative w-80 h-full p-6 flex flex-col justify-center gap-6 z-50 xl:z-10 backdrop-blur-sm border-r transition-colors duration-300",
+          "xl:translate-x-0", // Ensure no transform on desktop
+          !isDesktop && !leftDrawerOpen && "pointer-events-none", // Disable pointer events when hidden
+          isDark ? "bg-black/95 xl:bg-black/20 border-white/10" : "bg-white/95 xl:bg-white/50 border-slate-200"
+        )}
+      >
+            {/* Close Button for Tablet */}
+            <button
+              onClick={() => setLeftDrawerOpen(false)}
+              className={cn(
+                "xl:hidden absolute top-4 right-4 p-2 rounded-full transition-all",
+                isDark ? "bg-white/10 text-white hover:bg-white/20" : "bg-slate-200 text-slate-700 hover:bg-slate-300"
+              )}
+              title="Close"
+            >
+              <X size={20} />
+            </button>
+
+            <div className="mb-8">
+              <h1 className={cn(
+                "text-4xl font-black tracking-tighter transition-colors",
+                isDark ? "text-white" : "text-slate-800"
+              )}>
+                LUDO<br />{isDark ? 'NEON' : 'CLASSIC'}
+              </h1>
+              <p className={cn(
+                "text-sm font-medium tracking-widest mt-2 transition-colors",
+                isDark ? "text-gray-400" : "text-slate-500"
+              )}>MODULAR CHAOS</p>
+            </div>
+
+            <div className="flex flex-col gap-4">
+              {leftPlayers.map((p) => (
+                <PlayerCard
+                  key={p.id}
+                  player={p}
+                  isActive={players[currentPlayerIndex]?.id === p.id}
+                  onActivatePowerUp={(idx) => {
+                    const powerUp = p.powerUps[idx];
+                    if (!powerUp) return;
+                    
+                    // Power-ups that need selection will trigger the selection modal
+                    const needsSelection = ['TELEPORT', 'EXACT_MOVE', 'SEND_BACK', 'FREEZE', 'MAGNET', 'STEAL_POWERUP', 'DICE_LOCK'].includes(powerUp.type);
+                    
+                    if (needsSelection) {
+                      // Trigger selection modal
+                      useGameStore.setState({
+                        phase: 'POWERUP_SELECTION',
+                        pendingPowerUpSelection: { powerUpType: powerUp.type, powerUpIndex: idx, playerId: p.id }
+                      });
+                    } else {
+                      // Try to find a default token for power-ups that need one
+                      const myToken = Object.values(tokens).find(t => t.playerId === p.id && (t.status === 'ACTIVE' || t.status === 'HOME_STRETCH'));
+                      if (myToken) {
+                        activatePowerUp(p.id, idx, myToken.id);
+                      } else {
+                        // If no token available, still try to activate (some power-ups don't need tokens)
+                        activatePowerUp(p.id, idx);
+                      }
+                    }
+                  }}
+                />
+              ))}
+            </div>
+          </motion.div>
 
       {/* Center Board */}
       <div className={cn(
-        "flex-1 flex items-center justify-center relative z-0 transition-colors duration-300",
+        "flex-1 min-w-0 flex items-center justify-center relative z-0 transition-colors duration-300",
         isDark ? "bg-neutral-900" : "bg-slate-50"
       )}>
-        <div className="w-full max-w-[90vh] aspect-square p-4">
+        <div className="w-full h-full max-w-full max-h-full xl:max-w-[90vh] xl:max-h-[90vh] xl:aspect-square p-1 xl:p-4 flex items-center justify-center">
           <BoardCanvas debugMode={showDebug} />
         </div>
 
         {/* Floating Controls (Bottom Center) */}
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-4 z-20">
+        <div className="absolute bottom-4 xl:bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 xl:gap-4 z-20">
           <AnimatePresence mode="wait">
             {phase === 'MOVING' && (
               <motion.div
@@ -271,65 +362,88 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Right Panel */}
-      <div className={cn(
-        "w-80 p-6 flex flex-col justify-center gap-6 z-10 backdrop-blur-sm border-l transition-colors duration-300",
-        isDark ? "bg-black/20 border-white/10" : "bg-white/50 border-slate-200"
-      )}>
-        <div className="flex flex-col gap-4">
-          {rightPlayers.map((p) => (
-            <PlayerCard
-              key={p.id}
-              player={p}
-              isActive={players[currentPlayerIndex]?.id === p.id}
-              onActivatePowerUp={(idx) => {
-                const powerUp = p.powerUps[idx];
-                if (!powerUp) return;
-                
-                // Power-ups that need selection will trigger the selection modal
-                const needsSelection = ['TELEPORT', 'EXACT_MOVE', 'SEND_BACK', 'FREEZE', 'MAGNET', 'STEAL_POWERUP', 'DICE_LOCK'].includes(powerUp.type);
-                
-                if (needsSelection) {
-                  // Trigger selection modal
-                  useGameStore.setState({
-                    phase: 'POWERUP_SELECTION',
-                    pendingPowerUpSelection: { powerUpType: powerUp.type, powerUpIndex: idx, playerId: p.id }
-                  });
-                } else {
-                  // Try to find a default token for power-ups that need one
-                  const myToken = Object.values(tokens).find(t => t.playerId === p.id && (t.status === 'ACTIVE' || t.status === 'HOME_STRETCH'));
-                  if (myToken) {
-                    activatePowerUp(p.id, idx, myToken.id);
-                  } else {
-                    // If no token available, still try to activate (some power-ups don't need tokens)
-                    activatePowerUp(p.id, idx);
-                  }
-                }
-              }}
-            />
-          ))}
-        </div>
+      {/* Right Panel - Desktop: Always visible, Tablet: Drawer */}
+      <motion.div
+        initial={false}
+        animate={
+          isDesktop 
+            ? {} 
+            : { x: rightDrawerOpen ? 0 : '100%' }
+        }
+        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+        className={cn(
+          "fixed xl:relative w-80 h-full p-6 flex flex-col justify-center gap-6 z-50 xl:z-10 backdrop-blur-sm border-l transition-colors duration-300 right-0",
+          "xl:translate-x-0", // Ensure no transform on desktop
+          !isDesktop && !rightDrawerOpen && "pointer-events-none", // Disable pointer events when hidden
+          isDark ? "bg-black/95 xl:bg-black/20 border-white/10" : "bg-white/95 xl:bg-white/50 border-slate-200"
+        )}
+      >
+            {/* Close Button for Tablet */}
+            <button
+              onClick={() => setRightDrawerOpen(false)}
+              className={cn(
+                "xl:hidden absolute top-4 left-4 p-2 rounded-full transition-all",
+                isDark ? "bg-white/10 text-white hover:bg-white/20" : "bg-slate-200 text-slate-700 hover:bg-slate-300"
+              )}
+              title="Close"
+            >
+              <X size={20} />
+            </button>
 
-        {/* Game Log / Status */}
-        <div className={cn(
-          "mt-auto p-4 rounded-xl border shadow-sm transition-colors",
-          isDark ? "bg-white/5 border-white/10" : "bg-white border-slate-200"
-        )}>
-          <h4 className={cn(
-            "text-xs font-bold uppercase tracking-wider mb-2",
-            isDark ? "text-gray-500" : "text-slate-400"
-          )}>Game Status</h4>
-          <p className={cn(
-            "text-sm font-medium",
-            isDark ? "text-gray-300" : "text-slate-600"
-          )}>
-            {phase === 'ROLLING' ? `Waiting for ${currentPlayer?.name} to roll...` :
-              phase === 'MOVING' ? `${currentPlayer?.name} is moving...` :
-                phase === 'SKIPPING' ? `Skipping ${currentPlayer?.name}...` :
-                  'Game in progress'}
-          </p>
-        </div>
-      </div>
+            <div className="flex flex-col gap-4">
+              {rightPlayers.map((p) => (
+                <PlayerCard
+                  key={p.id}
+                  player={p}
+                  isActive={players[currentPlayerIndex]?.id === p.id}
+                  onActivatePowerUp={(idx) => {
+                    const powerUp = p.powerUps[idx];
+                    if (!powerUp) return;
+                    
+                    // Power-ups that need selection will trigger the selection modal
+                    const needsSelection = ['TELEPORT', 'EXACT_MOVE', 'SEND_BACK', 'FREEZE', 'MAGNET', 'STEAL_POWERUP', 'DICE_LOCK'].includes(powerUp.type);
+                    
+                    if (needsSelection) {
+                      // Trigger selection modal
+                      useGameStore.setState({
+                        phase: 'POWERUP_SELECTION',
+                        pendingPowerUpSelection: { powerUpType: powerUp.type, powerUpIndex: idx, playerId: p.id }
+                      });
+                    } else {
+                      // Try to find a default token for power-ups that need one
+                      const myToken = Object.values(tokens).find(t => t.playerId === p.id && (t.status === 'ACTIVE' || t.status === 'HOME_STRETCH'));
+                      if (myToken) {
+                        activatePowerUp(p.id, idx, myToken.id);
+                      } else {
+                        // If no token available, still try to activate (some power-ups don't need tokens)
+                        activatePowerUp(p.id, idx);
+                      }
+                    }
+                  }}
+                />
+              ))}
+            </div>
+
+            {/* Game Log / Status */}
+            <div className={cn(
+              "mt-auto p-4 rounded-xl border shadow-sm transition-colors",
+              isDark ? "bg-white/5 border-white/10" : "bg-white border-slate-200"
+            )}>
+              <h4 className={cn(
+                "text-xs font-bold uppercase tracking-wider mb-2",
+                isDark ? "text-gray-500" : "text-slate-400"
+              )}>Game Status</h4>
+              <p className={cn(
+                "text-sm font-medium",
+                isDark ? "text-gray-300" : "text-slate-600"
+              )}>
+                {phase === 'ROLLING' ? `Waiting for ${currentPlayer?.name} to roll...` :
+                  phase === 'MOVING' ? `${currentPlayer?.name} is moving...` :
+                    phase === 'SKIPPING' ? `Skipping ${currentPlayer?.name}...` :
+                      'Game in progress'}
+              </p>
+            </div>
+          </motion.div>
 
       {/* Power-up Modals */}
       {phase === 'POWERUP_DISCARD' && pendingPowerUpCollection && (
