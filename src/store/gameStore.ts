@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { GameState, Player, Token, TokenId, PowerUp, PowerUpType } from '../types/game';
-import { getTrackLength, getStartPosition, isSafeZone, isPowerUpZone } from '../utils/boardUtils';
+import { getTrackLength, getStartPosition, getTurningIndex, getSkippedIndex, isSafeZone, isPowerUpZone } from '../utils/boardUtils';
 
 interface GameActions {
     initGame: (playerCount: number) => void;
@@ -81,6 +81,10 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
         const hasValidMove = playerTokens.some(token => {
             if (token.status === 'BASE') return roll === 6;
             if (token.status === 'ACTIVE') return true;
+            if (token.status === 'HOME_STRETCH') {
+                // Can move if the roll won't overshoot (position + roll <= 5)
+                return token.position + roll <= 5;
+            }
             return false;
         });
 
@@ -105,6 +109,10 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
         const hasValidMove = playerTokens.some(token => {
             if (token.status === 'BASE') return value === 6;
             if (token.status === 'ACTIVE') return true;
+            if (token.status === 'HOME_STRETCH') {
+                // Can move if the roll won't overshoot (position + value <= 5)
+                return token.position + value <= 5;
+            }
             return false;
         });
 
@@ -145,6 +153,8 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
         } else if (token.status === 'ACTIVE') {
             // Logic: Move
             const trackLen = getTrackLength(boardConfig.playerCount);
+            const playerIndex = players.findIndex(p => p.id === token.playerId);
+            const startPos = getStartPosition(playerIndex, boardConfig.playerCount);
 
             // Handle Reverse Power-Up
             const direction = token.isReversed ? -1 : 1;
@@ -155,43 +165,137 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
                 newTokens[tokenId] = { ...newTokens[tokenId]!, isReversed: false };
             }
 
-            // Check Capture
-            const collisionTokenId = Object.keys(tokens).find((tid) => {
-                const t = tokens[tid];
-                return t.position === newPos && t.status === 'ACTIVE' && t.id !== tokenId;
-            });
+            // Check if token has passed its start position (completed circuit)
+            // A token enters home stretch when it reaches its "turning index" and would move forward
+            // Each player has a specific turning index where they leave the main track:
+            // Red: 50 (0,7), Green: 11 (7,0), Yellow: 24 (14,7), Blue: 37 (7,14)
+            // When at turning index, tokens skip the next index (skippedIndex) and go directly to home stretch
+            // The first step into home stretch is always position 0, then remaining steps move forward
+            let enteredHomeStretch = false;
+            let remainingSteps = 0;
+            if (direction === 1 && !token.isReversed) {
+                const oldPos = token.position;
+                const turningIndex = getTurningIndex(playerIndex, boardConfig.playerCount);
+                const skippedIndex = getSkippedIndex(playerIndex, boardConfig.playerCount);
+                
+                // Check if we're at the turning index (where we enter home stretch)
+                if (oldPos === turningIndex) {
+                    // At turning index, any roll enters home stretch
+                    // We skip the skippedIndex and go directly to home stretch
+                    // Position 0 = first square in home stretch, so diceRoll determines final position
+                    enteredHomeStretch = true;
+                    remainingSteps = diceRoll; // diceRoll = 1 means position 0, diceRoll = 2 means position 1, etc.
+                } else if (oldPos === (turningIndex - 1 + trackLen) % trackLen) {
+                    // At position before turning index
+                    // If rolling 1, go to turning index (don't enter home stretch yet)
+                    // If rolling 2+, we pass through turning index and enter home stretch
+                    if (diceRoll >= 2) {
+                        enteredHomeStretch = true;
+                        // We go 1 step to turning index, then use remaining steps in home stretch
+                        // remainingSteps = diceRoll - 1 means: 1 step to enter (position 0), then (diceRoll-1) more steps
+                        remainingSteps = diceRoll - 1;
+                    }
+                    // If rolling 1, enteredHomeStretch stays false, token moves to turning index
+                } else if (oldPos !== startPos && oldPos !== turningIndex && oldPos !== skippedIndex) {
+                    // For other positions, check if we would reach or pass the turning index
+                    const distanceToTurning = (turningIndex - oldPos + trackLen) % trackLen;
+                    if (distanceToTurning < diceRoll && distanceToTurning > 0) {
+                        // Would pass turning index (not land exactly on it)
+                        enteredHomeStretch = true;
+                        // Calculate steps after reaching turning index
+                        // We go distanceToTurning steps to reach turning index, then remaining steps into home stretch
+                        // remainingSteps = diceRoll - distanceToTurning means: distanceToTurning steps to turning index, then (diceRoll - distanceToTurning) steps into home stretch
+                        remainingSteps = diceRoll - distanceToTurning;
+                    }
+                    // If distanceToTurning == diceRoll, we land exactly at turning index, so don't enter home stretch yet
+                }
+            }
 
-            let hitInvulnerable = false;
-            if (collisionTokenId) {
-                const collisionToken = tokens[collisionTokenId];
-                if (collisionToken && collisionToken.playerId !== token.playerId && !isSafeZone(newPos, boardConfig.playerCount)) {
-                    if (collisionToken.isInvulnerable) {
-                        shouldEndTurn = true;
-                        hitInvulnerable = true;
-                    } else {
-                        // Capture!
-                        newTokens[collisionTokenId] = { ...collisionToken, status: 'BASE', position: -1 };
-                        shouldEndTurn = false; // Bonus turn for capture
+            if (enteredHomeStretch) {
+                // Enter home stretch directly into the lane, skipping the skippedIndex square
+                // Position 0 = first position in lane (1, 7 for red), 1-4 = further in lane, 5 = at center home
+                // remainingSteps represents how many steps we take into the home stretch:
+                // - remainingSteps = 1 means we enter at position 0 (first square)
+                // - remainingSteps = 2 means we enter and move 1 more step to position 1
+                // - etc.
+                // So homeStretchPos = remainingSteps - 1 (but minimum 0)
+                const homeStretchPos = Math.max(0, remainingSteps - 1);
+                
+                if (homeStretchPos >= 5 || remainingSteps >= 6) {
+                    // Reached center home - token is finished!
+                    newTokens[tokenId] = { ...token, status: 'FINISHED', position: 5 };
+                } else {
+                    newTokens[tokenId] = { ...token, status: 'HOME_STRETCH', position: homeStretchPos };
+                    // If rolling 6, get extra turn
+                    if (diceRoll === 6) {
+                        shouldEndTurn = false;
                     }
                 }
-            }
+            } else {
+                // Continue on main track
+                // Check Capture
+                const collisionTokenId = Object.keys(tokens).find((tid) => {
+                    const t = tokens[tid];
+                    return t.position === newPos && t.status === 'ACTIVE' && t.id !== tokenId;
+                });
 
-            // Power-Up Acquisition
-            if (isPowerUpZone(newPos, boardConfig.playerCount)) {
-                const playerIndex = players.findIndex(p => p.id === token.playerId);
-                if (playerIndex !== -1) {
-                    const newPowerUp = generatePowerUp();
-                    newPlayers[playerIndex] = {
-                        ...newPlayers[playerIndex]!,
-                        powerUps: [...newPlayers[playerIndex]!.powerUps, newPowerUp]
-                    };
+                let hitInvulnerable = false;
+                if (collisionTokenId) {
+                    const collisionToken = tokens[collisionTokenId];
+                    if (collisionToken && collisionToken.playerId !== token.playerId && !isSafeZone(newPos, boardConfig.playerCount)) {
+                        if (collisionToken.isInvulnerable) {
+                            shouldEndTurn = true;
+                            hitInvulnerable = true;
+                        } else {
+                            // Capture!
+                            newTokens[collisionTokenId] = { ...collisionToken, status: 'BASE', position: -1 };
+                            shouldEndTurn = false; // Bonus turn for capture
+                        }
+                    }
+                }
+
+                // Power-Up Acquisition
+                if (isPowerUpZone(newPos, boardConfig.playerCount)) {
+                    if (playerIndex !== -1) {
+                        const newPowerUp = generatePowerUp();
+                        newPlayers[playerIndex] = {
+                            ...newPlayers[playerIndex]!,
+                            powerUps: [...newPlayers[playerIndex]!.powerUps, newPowerUp]
+                        };
+                    }
+                }
+
+                newTokens[tokenId] = { ...newTokens[tokenId]!, position: newPos };
+                // If rolling 6 with an active token, get an extra turn (unless invulnerable capture occurred)
+                if (diceRoll === 6 && !hitInvulnerable) {
+                    shouldEndTurn = false;
                 }
             }
-
-            newTokens[tokenId] = { ...newTokens[tokenId]!, position: newPos };
-            // If rolling 6 with an active token, get an extra turn (unless invulnerable capture occurred)
-            if (diceRoll === 6 && !hitInvulnerable) {
-                shouldEndTurn = false;
+        } else if (token.status === 'HOME_STRETCH') {
+            // Logic: Move in home stretch
+            const playerIndex = players.findIndex(p => p.id === token.playerId);
+            // Position in home stretch: 0 = at start square, 1-5 = in lane, 5 = finished
+            // We store the home stretch position in a special way - using position % 1000 to store home stretch pos
+            // Actually, let's use position differently: for HOME_STRETCH, position represents home stretch index (0-5)
+            let homePos = token.position;
+            if (homePos < 0 || homePos > 5) {
+                // If position is still the track position, convert to home stretch position 0
+                homePos = 0;
+            }
+            
+            const newHomePos = homePos + diceRoll;
+            
+            if (newHomePos >= 5) {
+                // Reached center home - token is finished!
+                newTokens[tokenId] = { ...token, status: 'FINISHED', position: 5 };
+                // Finished token doesn't get extra turn
+            } else {
+                // Move forward in home stretch
+                newTokens[tokenId] = { ...token, position: newHomePos };
+                // If rolling 6, get extra turn
+                if (diceRoll === 6) {
+                    shouldEndTurn = false;
+                }
             }
         }
 

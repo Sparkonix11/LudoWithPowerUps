@@ -173,6 +173,12 @@ const BoardCanvas = () => {
 
                         cx = (baseX + dx) * CELL_SIZE;
                         cy = (baseY + dy) * CELL_SIZE;
+                    } else if (token.status === 'HOME_STRETCH' || token.status === 'FINISHED') {
+                        const pIdx = players.findIndex(p => p.id === token.playerId);
+                        const homePos = token.status === 'FINISHED' ? 5 : token.position;
+                        const coords = getCoordinates(0, boardConfig.playerCount, 'HOME_STRETCH', pIdx, homePos);
+                        cx = coords.x;
+                        cy = coords.y;
                     } else {
                         const coords = getCoordinates(token.position, boardConfig.playerCount);
                         cx = coords.x;

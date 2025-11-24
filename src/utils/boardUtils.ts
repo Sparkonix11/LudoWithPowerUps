@@ -1,30 +1,52 @@
 const ARM_LENGTH = 6;
 
 export const getTrackLength = (playerCount: number): number => {
-    if (playerCount === 4) return 52;
+    if (playerCount === 4) return 52; // Main track has 52 positions (0-51), but each player skips one when entering home stretch
     return 13 * playerCount;
 };
 
 export const getStartPosition = (playerIndex: number, playerCount: number): number => {
     if (playerCount === 4) {
-        // Player indices: 0=Red, 1=Green, 2=Blue, 3=Yellow
-        // Start positions: Red=0, Green=13, Blue=39, Yellow=26
-        const startPositions = [0, 13, 39, 26];
+        // Player indices: 0=Red, 1=Green, 2=Yellow, 3=Blue
+        // Start positions for 52-position track:
+        // Red: position 0 = (1, 6)
+        // Green: position 13 = (8, 1)
+        // Yellow: position 26 = (13, 8)
+        // Blue: position 39 = (6, 13)
+        const startPositions = [0, 13, 26, 39];
         return startPositions[playerIndex] ?? playerIndex * 13;
     }
     return playerIndex * 13;
 };
 
+// Get the turning index where a player enters home stretch (skips the next index)
+export const getTurningIndex = (playerIndex: number, playerCount: number): number => {
+    if (playerCount === 4) {
+        // Turning indices: where each player leaves main track to enter home stretch
+        // Red: 50 (0,7), Green: 11 (7,0), Yellow: 24 (14,7), Blue: 37 (7,14)
+        const turningIndices = [50, 11, 24, 37];
+        return turningIndices[playerIndex] ?? 0;
+    }
+    return 0;
+};
+
+// Get the skipped index that the player never touches when entering home stretch
+export const getSkippedIndex = (playerIndex: number, playerCount: number): number => {
+    if (playerCount === 4) {
+        // Skipped indices: the square after turning index that player skips
+        // Red: 51 (0,6), Green: 12 (8,0), Yellow: 25 (14,8), Blue: 38 (6,14)
+        const skippedIndices = [51, 12, 25, 38];
+        return skippedIndices[playerIndex] ?? 0;
+    }
+    return 0;
+};
+
 export const isSafeZone = (position: number, playerCount: number): boolean => {
     // Standard Ludo Safe Zones:
-    // 1. Start positions (Red=0, Green=13, Blue=39, Yellow=26)
-    // 2. Star positions (8, 21, 34, 47) - typically 8 steps from start?
-    // Let's check the image.
-    // Red Start is at index 0 (relative to Red).
-    // Star is at index 8?
-    // Let's define fixed safe indices for 4 players.
+    // 1. Start positions (Red=0, Green=13, Yellow=26, Blue=39) - for 52-position track
+    // 2. Star positions (8, 21, 34, 47) - typically 8 steps from start
     if (playerCount === 4) {
-        const starts = [0, 13, 39, 26]; // Red, Green, Blue, Yellow
+        const starts = [0, 13, 26, 39]; // Red, Green, Yellow, Blue
         const stars = [8, 21, 34, 47];
         return starts.includes(position) || stars.includes(position);
     }
@@ -91,6 +113,8 @@ const generateStandardPath = () => {
     // Segment 10 (Up from Blue): (6,13) to (6,9) [5 steps]
     // Segment 11 (Left towards Red): (5,8) to (0,8) [6 steps]
     // Segment 12 (Turn): (0,7), (0,6) [2 steps]
+    // Note: Red reaches (0,7) at index 50 and turns into home stretch, skipping (0,6) at index 51
+    // Other colors use (0,6) as part of their path, but Red never touches it
 
     // Total steps: 5+6+2+5+6+2+5+6+2+5+6+2 = 52. Perfect.
 
@@ -116,17 +140,68 @@ const generateStandardPath = () => {
     add(7, 14); add(6, 14);
     // 39-43: Up
     for (let y = 13; y >= 9; y--) add(6, y);
-    // 44-49: Left
+    // 44-49: Left (x=5 to x=0, all at y=8)
     for (let x = 5; x >= 0; x--) add(x, 8);
-    // 50-51: Left Turn
-    add(0, 7); add(0, 6); // Note: 0,6 is index 51. Next is 1,6 (index 0).
+    // Position 50: (0, 7) - turning point for Red
+    add(0, 7);
+    // Position 51: (0, 6) - skipped by Red, used by other colors
+    add(0, 6);
 
     return path;
 };
 
 const STANDARD_PATH = generateStandardPath();
 
-export const getCoordinates = (position: number, playerCount: number) => {
+export const getHomeStretchCoordinates = (playerIndex: number, homePosition: number, playerCount: number) => {
+    // homePosition: 0 = first square in lane (after start square), 1-4 = further in lane, 5 = at center home
+    // For Red: 0 = (1, 7), 1 = (2, 7), 2 = (3, 7), 3 = (4, 7), 4 = (5, 7), 5 = center (7.5, 7.5)
+    if (playerCount !== 4) return { x: 50, y: 50 };
+    
+    const cellSize = 100 / 15;
+    const offset = cellSize / 2;
+    
+    // Home stretch lanes (first square is immediately after start square):
+    // Red (0): x={1 to 6}, y=7 (left to right) - position 0 = (1, 7)
+    // Green (1): x=7, y={1 to 6} (top to bottom) - position 0 = (7, 1)
+    // Yellow (3): x={9 to 14}, y=7 (right to left) - position 0 = (13, 7)
+    // Blue (2): x=7, y={9 to 14} (bottom to top) - position 0 = (7, 13)
+    
+    if (homePosition >= 5) {
+        // At center home
+        return { x: 50, y: 50 }; // Center of board (7.5 * cellSize = 50)
+    }
+    
+    if (playerIndex === 0) { // Red - left to right
+        return {
+            x: (1 + homePosition) * cellSize + offset,
+            y: 7 * cellSize + offset
+        };
+    } else if (playerIndex === 1) { // Green - top to bottom
+        return {
+            x: 7 * cellSize + offset,
+            y: (1 + homePosition) * cellSize + offset
+        };
+    } else if (playerIndex === 2) { // Blue - bottom to top
+        return {
+            x: 7 * cellSize + offset,
+            y: (13 - homePosition) * cellSize + offset
+        };
+    } else if (playerIndex === 3) { // Yellow - right to left
+        return {
+            x: (13 - homePosition) * cellSize + offset,
+            y: 7 * cellSize + offset
+        };
+    }
+    
+    return { x: 50, y: 50 };
+};
+
+export const getCoordinates = (position: number, playerCount: number, status?: string, playerIndex?: number, homePosition?: number) => {
+    // If token is in home stretch, use home stretch coordinates
+    if (status === 'HOME_STRETCH' && playerIndex !== undefined && homePosition !== undefined) {
+        return getHomeStretchCoordinates(playerIndex, homePosition, playerCount);
+    }
+    
     if (playerCount === 4) {
         // Map 15x15 grid to 0-100 viewbox
         // Grid size 15. Cell size = 100 / 15 = 6.66
