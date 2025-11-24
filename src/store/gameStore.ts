@@ -161,11 +161,13 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
                 return t.position === newPos && t.status === 'ACTIVE' && t.id !== tokenId;
             });
 
+            let hitInvulnerable = false;
             if (collisionTokenId) {
                 const collisionToken = tokens[collisionTokenId];
                 if (collisionToken && collisionToken.playerId !== token.playerId && !isSafeZone(newPos, boardConfig.playerCount)) {
                     if (collisionToken.isInvulnerable) {
                         shouldEndTurn = true;
+                        hitInvulnerable = true;
                     } else {
                         // Capture!
                         newTokens[collisionTokenId] = { ...collisionToken, status: 'BASE', position: -1 };
@@ -187,7 +189,10 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
             }
 
             newTokens[tokenId] = { ...newTokens[tokenId]!, position: newPos };
-            if (diceRoll === 6 && shouldEndTurn !== true) shouldEndTurn = false; // Keep false if already false
+            // If rolling 6 with an active token, get an extra turn (unless invulnerable capture occurred)
+            if (diceRoll === 6 && !hitInvulnerable) {
+                shouldEndTurn = false;
+            }
         }
 
         // Decrement Shield counters for current player's tokens
