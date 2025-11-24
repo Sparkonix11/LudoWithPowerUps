@@ -184,7 +184,7 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
         if (token.frozenTurnsRemaining > 0) return;
 
         const newTokens = { ...tokens };
-        const newPlayers = [...players];
+        let newPlayers = [...players];
         let shouldEndTurn = true;
 
         // Logic: Base -> Start
@@ -323,6 +323,9 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
                     if (state.powerUpsOnBoard[powerUpKey]) {
                         // Collect power-up
                         get().collectPowerUp(newPos, token.playerId);
+                        // Update newPlayers to reflect the power-up collection
+                        const stateAfterCollection = get();
+                        newPlayers = [...stateAfterCollection.players];
                     }
                 }
 
@@ -402,8 +405,14 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
             }
         });
 
-        set({ tokens: newTokens, players: newPlayers, phase: shouldEndTurn ? 'ROLLING' : 'ROLLING', diceRoll: null });
-        if (shouldEndTurn) {
+        // Check if there's a pending power-up collection (player has 3 power-ups)
+        const finalState = get();
+        const finalPhase = finalState.pendingPowerUpCollection 
+            ? 'POWERUP_DISCARD' 
+            : (shouldEndTurn ? 'ROLLING' : 'ROLLING');
+        
+        set({ tokens: newTokens, players: newPlayers, phase: finalPhase, diceRoll: null });
+        if (shouldEndTurn && !finalState.pendingPowerUpCollection) {
             get().nextTurn();
         }
     },
