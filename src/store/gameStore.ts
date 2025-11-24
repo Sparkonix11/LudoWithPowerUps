@@ -109,12 +109,30 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
     },
 
     setDiceRoll: () => {
-        const roll = Math.floor(Math.random() * 6) + 1;
         const state = get();
         const player = state.players[state.currentPlayerIndex];
         if (!player) return;
 
         const playerTokens = Object.values(state.tokens).filter(t => t.playerId === player.id);
+        
+        // Check if all tokens are locked (in BASE status)
+        const allTokensLocked = playerTokens.length > 0 && playerTokens.every(token => token.status === 'BASE');
+        
+        // If all tokens are locked, give a slightly higher chance of rolling 6
+        let roll: number;
+        if (allTokensLocked) {
+            // 25% chance of 6, 15% chance each for 1-5
+            const random = Math.random();
+            if (random < 0.25) {
+                roll = 6;
+            } else {
+                // Distribute remaining 75% evenly among 1-5 (15% each)
+                roll = Math.floor((random - 0.25) / 0.15) + 1;
+            }
+        } else {
+            // Normal distribution
+            roll = Math.floor(Math.random() * 6) + 1;
+        }
 
         const hasValidMove = playerTokens.some(token => {
             if (token.status === 'BASE') return roll === 6;
