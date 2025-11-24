@@ -243,7 +243,18 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
 
     nextTurn: () =>
         set((state) => {
-            const nextPlayerIndex = (state.currentPlayerIndex + 1) % state.players.length;
+            // Clockwise turn order: Red(0) -> Green(1) -> Yellow(3) -> Blue(2) -> Red(0)
+            // For 4 players, the clockwise sequence is: 0 -> 1 -> 3 -> 2 -> 0
+            let nextPlayerIndex: number;
+            if (state.players.length === 4) {
+                const clockwiseOrder = [0, 1, 3, 2];
+                const currentIndexInOrder = clockwiseOrder.indexOf(state.currentPlayerIndex);
+                const nextIndexInOrder = (currentIndexInOrder + 1) % clockwiseOrder.length;
+                nextPlayerIndex = clockwiseOrder[nextIndexInOrder]!;
+            } else {
+                // For other player counts, use standard sequential order
+                nextPlayerIndex = (state.currentPlayerIndex + 1) % state.players.length;
+            }
             return {
                 currentPlayerIndex: nextPlayerIndex,
                 diceRoll: null,
