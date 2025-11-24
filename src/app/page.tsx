@@ -6,11 +6,27 @@ import { Moon, Sun, Maximize, Minimize } from 'lucide-react';
 import BoardCanvas from '../components/BoardCanvas';
 import { Dice } from '../components/Dice';
 import { PlayerCard } from '../components/PlayerCard';
+import { PowerUpDiscardModal } from '../components/PowerUpDiscardModal';
+import { PowerUpSelectionModal } from '../components/PowerUpSelectionModal';
 import { useGameStore } from '../store/gameStore';
 import { cn } from '../lib/utils';
 
 export default function Home() {
-  const { initGame, diceRoll, setDiceRoll, setDiceRollValue, currentPlayerIndex, players, phase, moveToken, tokens, activatePowerUp, theme, toggleTheme } = useGameStore();
+  const { 
+    initGame, 
+    diceRoll, 
+    setDiceRoll, 
+    setDiceRollValue, 
+    currentPlayerIndex, 
+    players, 
+    phase, 
+    tokens, 
+    activatePowerUp, 
+    theme, 
+    toggleTheme,
+    pendingPowerUpCollection,
+    pendingPowerUpSelection
+  } = useGameStore();
   const [rolling, setRolling] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
@@ -29,9 +45,9 @@ export default function Home() {
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen();
+      void document.documentElement.requestFullscreen();
     } else {
-      document.exitFullscreen();
+      void document.exitFullscreen();
     }
   };
 
@@ -114,8 +130,28 @@ export default function Home() {
               player={p}
               isActive={players[currentPlayerIndex]?.id === p.id}
               onActivatePowerUp={(idx) => {
-                const myToken = Object.values(tokens).find(t => t.playerId === p.id && t.status === 'ACTIVE');
-                if (myToken) activatePowerUp(p.id, idx, myToken.id);
+                const powerUp = p.powerUps[idx];
+                if (!powerUp) return;
+                
+                // Power-ups that need selection will trigger the selection modal
+                const needsSelection = ['TELEPORT', 'EXACT_MOVE', 'SEND_BACK', 'FREEZE', 'MAGNET', 'STEAL_POWERUP', 'DICE_LOCK'].includes(powerUp.type);
+                
+                if (needsSelection) {
+                  // Trigger selection modal
+                  useGameStore.setState({
+                    phase: 'POWERUP_SELECTION',
+                    pendingPowerUpSelection: { powerUpType: powerUp.type, powerUpIndex: idx, playerId: p.id }
+                  });
+                } else {
+                  // Try to find a default token for power-ups that need one
+                  const myToken = Object.values(tokens).find(t => t.playerId === p.id && (t.status === 'ACTIVE' || t.status === 'HOME_STRETCH'));
+                  if (myToken) {
+                    activatePowerUp(p.id, idx, myToken.id);
+                  } else {
+                    // If no token available, still try to activate (some power-ups don't need tokens)
+                    activatePowerUp(p.id, idx);
+                  }
+                }
               }}
             />
           ))}
@@ -247,8 +283,28 @@ export default function Home() {
               player={p}
               isActive={players[currentPlayerIndex]?.id === p.id}
               onActivatePowerUp={(idx) => {
-                const myToken = Object.values(tokens).find(t => t.playerId === p.id && t.status === 'ACTIVE');
-                if (myToken) activatePowerUp(p.id, idx, myToken.id);
+                const powerUp = p.powerUps[idx];
+                if (!powerUp) return;
+                
+                // Power-ups that need selection will trigger the selection modal
+                const needsSelection = ['TELEPORT', 'EXACT_MOVE', 'SEND_BACK', 'FREEZE', 'MAGNET', 'STEAL_POWERUP', 'DICE_LOCK'].includes(powerUp.type);
+                
+                if (needsSelection) {
+                  // Trigger selection modal
+                  useGameStore.setState({
+                    phase: 'POWERUP_SELECTION',
+                    pendingPowerUpSelection: { powerUpType: powerUp.type, powerUpIndex: idx, playerId: p.id }
+                  });
+                } else {
+                  // Try to find a default token for power-ups that need one
+                  const myToken = Object.values(tokens).find(t => t.playerId === p.id && (t.status === 'ACTIVE' || t.status === 'HOME_STRETCH'));
+                  if (myToken) {
+                    activatePowerUp(p.id, idx, myToken.id);
+                  } else {
+                    // If no token available, still try to activate (some power-ups don't need tokens)
+                    activatePowerUp(p.id, idx);
+                  }
+                }
               }}
             />
           ))}
@@ -274,6 +330,23 @@ export default function Home() {
           </p>
         </div>
       </div>
+
+      {/* Power-up Modals */}
+      {phase === 'POWERUP_DISCARD' && pendingPowerUpCollection && (
+        <PowerUpDiscardModal
+          player={players.find(p => p.id === pendingPowerUpCollection.playerId)!}
+          onClose={() => useGameStore.setState({ phase: 'ROLLING', pendingPowerUpCollection: null })}
+        />
+      )}
+
+      {phase === 'POWERUP_SELECTION' && pendingPowerUpSelection && (
+        <PowerUpSelectionModal
+          powerUpType={pendingPowerUpSelection.powerUpType}
+          powerUpIndex={pendingPowerUpSelection.powerUpIndex}
+          playerId={pendingPowerUpSelection.playerId}
+          onClose={() => useGameStore.setState({ phase: 'ROLLING', pendingPowerUpSelection: null })}
+        />
+      )}
     </main>
   );
 }

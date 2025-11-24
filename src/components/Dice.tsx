@@ -12,7 +12,7 @@ interface DiceProps {
     color?: string;
 }
 
-export const Dice = ({ rolling, value, onRoll, disabled, color = '#fff' }: DiceProps) => {
+export const Dice = ({ rolling, value, onRoll, disabled, color: _color = '#fff' }: DiceProps) => {
     return (
         <div className="flex flex-col items-center gap-4">
             <motion.button

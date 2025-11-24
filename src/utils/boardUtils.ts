@@ -1,5 +1,3 @@
-const ARM_LENGTH = 6;
-
 export const getTrackLength = (playerCount: number): number => {
     if (playerCount === 4) return 52; // Main track has 52 positions (0-51), but each player skips one when entering home stretch
     return 13 * playerCount;
@@ -58,10 +56,54 @@ export const isSafeZone = (position: number, playerCount: number): boolean => {
 };
 
 export const isPowerUpZone = (position: number, playerCount: number): boolean => {
-    if (isSafeZone(position, playerCount)) return false;
-    // Place power-ups on non-safe spots
-    // e.g., index 4, 17, 30, 43
+    if (playerCount === 4) {
+        // Safe zones can also spawn power-ups
+        const safeZones = [0, 8, 13, 21, 26, 34, 39, 47]; // Start positions and star positions
+        if (safeZones.includes(position)) return true;
+        
+        // Random squares: positions 4, 17, 30, 43 (existing pattern)
+        if (position % 13 === 4) return true;
+        
+        // Additional random positions per quadrant
+        // Red quadrant: 2, 3, 5, 6
+        // Green quadrant: 15, 16, 18, 19
+        // Yellow quadrant: 28, 29, 31, 32
+        // Blue quadrant: 41, 42, 44, 45
+        const randomPositions = [2, 3, 5, 6, 15, 16, 18, 19, 28, 29, 31, 32, 41, 42, 44, 45];
+        if (randomPositions.includes(position)) return true;
+        
+        return false;
+    }
+    
+    // For other player counts, use modulo pattern
     return position % 13 === 4;
+};
+
+export const getPowerUpSpawnPositions = (playerCount: number): number[] => {
+    if (playerCount === 4) {
+        const safeZones = [0, 8, 13, 21, 26, 34, 39, 47];
+        const randomPositions = [2, 3, 4, 5, 6, 15, 16, 17, 18, 19, 28, 29, 30, 31, 32, 41, 42, 43, 44, 45];
+        return [...safeZones, ...randomPositions];
+    }
+    
+    // For other player counts
+    const positions: number[] = [];
+    const trackLength = getTrackLength(playerCount);
+    for (let i = 0; i < trackLength; i++) {
+        if (isPowerUpZone(i, playerCount)) {
+            positions.push(i);
+        }
+    }
+    return positions;
+};
+
+export const getRandomPowerUpSpawnPositions = (count: number, playerCount: number, excludePositions: number[] = []): number[] => {
+    const allPositions = getPowerUpSpawnPositions(playerCount);
+    const available = allPositions.filter(pos => !excludePositions.includes(pos));
+    
+    // Shuffle and take count
+    const shuffled = [...available].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, Math.min(count, shuffled.length));
 };
 
 export const getHomeStart = (playerIndex: number, playerCount: number): number => {
@@ -113,7 +155,7 @@ const generateStandardPath = () => {
     // Segment 9 (Turn): (7,14), (6,14) [2 steps]
     // Segment 10 (Up from Blue): (6,13) to (6,9) [5 steps]
     // Segment 11 (Left towards Red): (5,8) to (0,8) [6 steps]
-    // Segment 12 (Turn): (0,7), (0,6) [2 steps]
+    // Segment 12 (Turn): (0,7), (0,6) [2 steps] 
     // Note: Red reaches (0,7) at index 50 and turns into home stretch, skipping (0,6) at index 51
     // Other colors use (0,6) as part of their path, but Red never touches it
 

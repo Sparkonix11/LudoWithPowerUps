@@ -1,7 +1,13 @@
 export type PlayerId = string;
 export type TokenId = string;
 
-export type PowerUpType = 'SHIELD' | 'REVERSE' | 'SWAP';
+export type PowerUpType = 
+    | 'SHIELD' | 'REVERSE' | 'SWAP'
+    | 'TELEPORT' | 'DOUBLE_MOVE' | 'EXACT_MOVE' | 'WARP' | 'BACKWARDS_DASH'
+    | 'SEND_BACK' | 'FREEZE' | 'STEAL_POWERUP' | 'MAGNET'
+    | 'IMMUNITY' | 'PHASE' | 'SAFE_PASSAGE'
+    | 'EXTRA_TURN' | 'BONUS_ROLL' | 'DICE_LOCK'
+    | 'SWAP_DICE' | 'HOME_STRETCH_TELEPORT';
 
 export interface PowerUp {
     id: string;
@@ -26,6 +32,14 @@ export interface Token {
     isInvulnerable: boolean;
     shieldTurnsRemaining: number;
     isReversed: boolean; // For Reverse Gear
+    frozenTurnsRemaining: number;
+    isPhased: boolean;
+    phasedTurnsRemaining: number;
+    isImmune: boolean;
+    immunityTurnsRemaining: number;
+    doubleMoveNext: boolean; // For DOUBLE_MOVE
+    exactMoveValue: number | null; // For EXACT_MOVE
+    safePassageMovesRemaining: number;
 }
 
 export interface BoardConfig {
@@ -33,7 +47,7 @@ export interface BoardConfig {
     // We'll add more geometry config here later
 }
 
-export type GamePhase = 'SETUP' | 'ROLLING' | 'MOVING' | 'POWERUP_SELECTION' | 'ANIMATING' | 'SKIPPING';
+export type GamePhase = 'SETUP' | 'ROLLING' | 'MOVING' | 'POWERUP_SELECTION' | 'POWERUP_DISCARD' | 'ANIMATING' | 'SKIPPING';
 
 export interface GameState {
     players: Player[];
@@ -42,4 +56,9 @@ export interface GameState {
     diceRoll: number | null;
     phase: GamePhase;
     boardConfig: BoardConfig;
+    powerUpsOnBoard: Record<string, PowerUp>; // Keyed by position string
+    powerUpUsedThisTurn: boolean;
+    turnCount: number;
+    pendingPowerUpCollection: { position: number; playerId: string } | null;
+    pendingPowerUpSelection: { powerUpType: PowerUpType; powerUpIndex: number; playerId: string } | null;
 }

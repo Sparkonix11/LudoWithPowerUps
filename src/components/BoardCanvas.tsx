@@ -1,16 +1,16 @@
 'use client';
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useGameStore } from '../store/gameStore';
-import { getTrackLength, getCoordinates, getPositionFromCoordinates } from '../utils/boardUtils';
+import { getCoordinates, getPositionFromCoordinates } from '../utils/boardUtils';
 
 interface BoardCanvasProps {
     debugMode?: boolean;
 }
 
 const BoardCanvas = ({ debugMode = false }: BoardCanvasProps) => {
-    const { boardConfig, tokens, players, moveToken, phase, setTokenPosition } = useGameStore();
+    const { boardConfig, tokens, players, moveToken, phase, setTokenPosition, powerUpsOnBoard } = useGameStore();
     const [mounted, setMounted] = useState(false);
     const [draggingToken, setDraggingToken] = useState<string | null>(null);
     const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
@@ -21,7 +21,7 @@ const BoardCanvas = ({ debugMode = false }: BoardCanvasProps) => {
     }, []);
 
     // Convert mouse coordinates to SVG viewBox coordinates
-    const getSVGCoordinates = (e: React.MouseEvent<SVGSVGElement> | MouseEvent): { x: number; y: number } | null => {
+    const getSVGCoordinates = (e: React.MouseEvent<SVGElement> | MouseEvent): { x: number; y: number } | null => {
         if (!svgRef.current) return null;
         const svg = svgRef.current;
         const rect = svg.getBoundingClientRect();
@@ -33,7 +33,7 @@ const BoardCanvas = ({ debugMode = false }: BoardCanvasProps) => {
         return { x, y };
     };
 
-    const handleDragStart = (e: React.MouseEvent, tokenId: string) => {
+    const handleDragStart = (e: React.MouseEvent<SVGElement>, tokenId: string) => {
         if (!debugMode) return;
         e.preventDefault();
         setDraggingToken(tokenId);
@@ -43,15 +43,15 @@ const BoardCanvas = ({ debugMode = false }: BoardCanvasProps) => {
         }
     };
 
-    const handleDrag = (e: React.MouseEvent<SVGSVGElement> | MouseEvent) => {
+    const handleDrag = useCallback((e: React.MouseEvent<SVGElement> | MouseEvent) => {
         if (!debugMode || !draggingToken) return;
         const coords = getSVGCoordinates(e);
         if (coords) {
             setDragPosition(coords);
         }
-    };
+    }, [debugMode, draggingToken]);
 
-    const handleDragEnd = (e: React.MouseEvent<SVGSVGElement> | MouseEvent) => {
+    const handleDragEnd = useCallback((e: React.MouseEvent<SVGElement> | MouseEvent) => {
         if (!debugMode || !draggingToken) return;
         
         const coords = getSVGCoordinates(e);
@@ -79,7 +79,7 @@ const BoardCanvas = ({ debugMode = false }: BoardCanvasProps) => {
         
         setDraggingToken(null);
         setDragPosition(null);
-    };
+    }, [debugMode, draggingToken, tokens, players, boardConfig.playerCount, setTokenPosition]);
 
     useEffect(() => {
         if (!debugMode || !draggingToken) return;
@@ -99,12 +99,9 @@ const BoardCanvas = ({ debugMode = false }: BoardCanvasProps) => {
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
         };
-    }, [debugMode, draggingToken]);
+    }, [debugMode, draggingToken, handleDrag, handleDragEnd]);
 
     if (!mounted) return null;
-
-    const trackLength = getTrackLength(boardConfig.playerCount);
-    const trackIndices = Array.from({ length: trackLength }, (_, i) => i);
 
     // Grid constants
     const CELL_SIZE = 100 / 15;
@@ -247,6 +244,50 @@ const BoardCanvas = ({ debugMode = false }: BoardCanvasProps) => {
             >
                 {renderGridBackground()}
 
+                {/* Render Power-ups on Board */}
+                {Object.entries(powerUpsOnBoard).map(([positionStr, powerUp]) => {
+                    const position = parseInt(positionStr);
+                    const coords = getCoordinates(position, boardConfig.playerCount);
+                    return (
+                        <motion.g
+                            key={powerUp.id}
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            className="cursor-pointer"
+                        >
+                            {/* Power-up glow effect */}
+                            <circle
+                                cx={coords.x}
+                                cy={coords.y}
+                                r="3"
+                                fill="rgba(255, 215, 0, 0.3)"
+                                className="animate-pulse"
+                            />
+                            {/* Power-up background */}
+                            <circle
+                                cx={coords.x}
+                                cy={coords.y}
+                                r="2.5"
+                                fill="rgba(255, 255, 255, 0.9)"
+                                stroke="rgba(255, 215, 0, 0.8)"
+                                strokeWidth="0.3"
+                            />
+                            {/* Power-up icon placeholder - would need SVG conversion */}
+                            <text
+                                x={coords.x}
+                                y={coords.y}
+                                fontSize="2"
+                                textAnchor="middle"
+                                dominantBaseline="middle"
+                                fill="#FFD700"
+                                fontWeight="bold"
+                            >
+                                ⚡
+                            </text>
+                        </motion.g>
+                    );
+                })}
+
                 {/* Render Tokens */}
                 {Object.values(tokens).map((token) => {
                     let cx, cy;
@@ -265,7 +306,7 @@ const BoardCanvas = ({ debugMode = false }: BoardCanvasProps) => {
                         else if (pIdx === 2) { baseX = 2; baseY = 11; } // Blue
                         else if (pIdx === 3) { baseX = 11; baseY = 11; } // Yellow
 
-                        const tokenIdx = parseInt(token.id.split('_t')[1] || '0');
+                        const tokenIdx = parseInt(token.id.split('_t')[1] ?? '0');
                         const dx = (tokenIdx % 2) * 2;
                         const dy = Math.floor(tokenIdx / 2) * 2;
 
@@ -306,7 +347,7 @@ const BoardCanvas = ({ debugMode = false }: BoardCanvasProps) => {
                                 cx={cx}
                                 cy={cy}
                                 r="2.5"
-                                fill={player?.color || '#fff'}
+                                fill={player?.color ?? '#fff'}
                                 stroke="#fff"
                                 strokeWidth="0.5"
                             />
